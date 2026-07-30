@@ -1,0 +1,13 @@
+node_modules/
+.vite/
+dist/
+build/
+*.log
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+# User-uploaded content (posters, avatars, movie video files) — runtime data,
+# not source code; keeps large binaries (esp. uploaded .mp4 movies) out of git.
+movie-be/movie/uploads/
