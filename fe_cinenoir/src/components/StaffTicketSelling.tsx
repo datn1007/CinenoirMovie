@@ -79,7 +79,7 @@ export default function StaffTicketSelling() {
 
   const totalAmount = selectedSeats.reduce((sum, seatCode) => {
     const seat = seats.find((s) => s.seatCode === seatCode);
-    return sum + (seat?.seatType === 2 ? 150000 : 100000);
+    return sum + (seat?.seatType === 2 ? 2000 : 1000);
   }, 0);
 
   const maxScore = Math.min(selectedMember?.score ?? 0, totalAmount);

@@ -36,4 +36,10 @@ public class BookingSearchResponse {
 
     // "THEATER" hoặc "ONLINE"
     private String ticketMode;
+
+    // "PAYOS" hoặc "CASH"
+    private String paymentMethod;
+
+    // "PENDING" | "PAID" | "CANCELLED" | "FAILED" | null (bookings created before this field existed)
+    private String paymentStatus;
 }

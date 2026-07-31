@@ -49,21 +49,21 @@ const concessionItems: ConcessionItem[] = [
     id: "combo-standard",
     name: "Combo Standard",
     description: "Bắp nhỏ + Coca",
-    price: 49000,
+    price: 1000,
     imageUrl: comboImageUrl,
   },
   {
     id: "combo-couple",
     name: "Combo Couple",
     description: "Bắp lớn + 2 Coca",
-    price: 79000,
+    price: 1500,
     imageUrl: comboImageUrl,
   },
   {
     id: "combo-family",
     name: "Combo Family",
     description: "2 Bắp + 4 Coca",
-    price: 149000,
+    price: 2000,
     imageUrl: comboImageUrl,
   },
 ];
@@ -115,7 +115,7 @@ const voucherPercent = (discountType?: string) => {
 
 
 const HOLD_SECONDS = 300;
-const ONLINE_TICKET_PRICE = 100000;
+const ONLINE_TICKET_PRICE = 1000;
 
 export default function BookingFlow({ movies, initialSelectedMovie, currentUser, onBookingComplete, onWatchMovie, payosMode, payosOrderCode }: BookingProps) {
   const holderId = currentUser?.accountId ?? "";
@@ -369,7 +369,7 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
     }
   };
 
-  const priceOf = (seatCode: string) => seats.find((seat) => seat.seatCode === seatCode)?.seatType === 2 ? 150000 : 100000;
+  const priceOf = (seatCode: string) => seats.find((seat) => seat.seatCode === seatCode)?.seatType === 2 ? 2000 : 1000;
   const totalSeatsPrice = ticketMode === "ONLINE"
     ? onlineQuantity * ONLINE_TICKET_PRICE
     : selectedSeats.reduce((sum, seat) => sum + priceOf(seat), 0);

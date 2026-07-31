@@ -447,7 +447,9 @@ public class BookingServiceImpl implements BookingService {
                         .status(invoice.getStatus())
                         .checkinStatus(invoice.getCheckinStatus())
                         .checkinTime(checkinTimeFormatted)
-                        .ticketMode(invoice.getTicketMode());
+                        .ticketMode(invoice.getTicketMode())
+                        .paymentMethod(invoice.getPaymentMethod())
+                        .paymentStatus(invoice.getPaymentStatus());
 
         if (invoice.getAccount() != null) {
             builder.accountId(invoice.getAccount().getAccountId())

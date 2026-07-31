@@ -34,6 +34,8 @@ interface BookingRecord {
   checkinStatus: number | null;
   checkinTime: string | null;
   ticketMode?: string | null;
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
 }
 
 interface UserProfileProps {
@@ -569,30 +571,38 @@ export default function UserProfile({ currentUser, onBack, onUserUpdate, hideBoo
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-2.5 shrink-0">
-                            {booking.checkinStatus !== 1 && (
-                              <span
-                                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                                  booking.status === 1
-                                    ? "bg-green-900/30 text-green-400 border-green-700/40"
+                            {booking.checkinStatus !== 1 && (() => {
+                              // A PayOS booking sits at status=null/paymentStatus="PENDING" until the
+                              // webhook (or the return-page fallback poll) confirms payment — that's not
+                              // the same as "Đã hủy" (cancelled), so it needs its own label.
+                              const awaitingPayment = booking.status == null && booking.paymentStatus === "PENDING";
+                              return (
+                                <span
+                                  className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                                    booking.status === 1
+                                      ? "bg-green-900/30 text-green-400 border-green-700/40"
+                                      : booking.status === 2 || awaitingPayment
+                                      ? "bg-blue-900/30 text-blue-400 border-blue-700/40"
+                                      : "bg-gray-800/50 text-gray-400 border-gray-600/30"
+                                  }`}
+                                >
+                                  {booking.status === 1 ? (
+                                    <CheckCircle className="w-3 h-3" />
+                                  ) : booking.status === 2 || awaitingPayment ? (
+                                    <Clock3 className="w-3 h-3" />
+                                  ) : (
+                                    <XCircle className="w-3 h-3" />
+                                  )}
+                                  {booking.status === 1
+                                    ? "Đã xác nhận"
                                     : booking.status === 2
-                                    ? "bg-blue-900/30 text-blue-400 border-blue-700/40"
-                                    : "bg-gray-800/50 text-gray-400 border-gray-600/30"
-                                }`}
-                              >
-                                {booking.status === 1 ? (
-                                  <CheckCircle className="w-3 h-3" />
-                                ) : booking.status === 2 ? (
-                                  <Clock3 className="w-3 h-3" />
-                                ) : (
-                                  <XCircle className="w-3 h-3" />
-                                )}
-                                {booking.status === 1
-                                  ? "Đã xác nhận"
-                                  : booking.status === 2
-                                  ? "Chờ xác nhận"
-                                  : "Đã hủy"}
-                              </span>
-                            )}
+                                    ? "Chờ xác nhận"
+                                    : awaitingPayment
+                                    ? "Chờ thanh toán"
+                                    : "Đã hủy"}
+                                </span>
+                              );
+                            })()}
 
                             {booking.ticketMode === "ONLINE" ? (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-900/30 text-emerald-400 border-emerald-700/40">
@@ -617,7 +627,8 @@ export default function UserProfile({ currentUser, onBack, onUserUpdate, hideBoo
                               </span>
                             )}
 
-                            {(booking.status === 1 || booking.status === 2) && (
+                            {(booking.status === 1 || booking.status === 2 ||
+                              (booking.status == null && booking.paymentStatus === "PENDING")) && (
                               cancelConfirmId === booking.invoiceId ? (
                                 <div className="flex flex-col items-end gap-1.5">
                                   <p className="text-[10px] text-white/50 text-right max-w-[140px]">
