@@ -121,9 +121,16 @@ public class BookingServiceImpl implements BookingService {
         invoice.setAddScore(request.getAddScore() != null ? request.getAddScore() : 0);
         invoice.setUseScore(request.getUseScore() != null ? request.getUseScore() : 0);
         invoice.setTotalMoney(request.getTotalMoney());
-        invoice.setStatus(request.getStatus() != null ? request.getStatus() : (short) 1);
+
+        boolean isPayOS = "PAYOS".equalsIgnoreCase(request.getPaymentMethod());
+        // No status bucket in the legacy enum means "awaiting payment" — leave it null until the
+        // PayOS webhook confirms payment instead of falsely claiming 1 (confirmed) up front.
+        invoice.setStatus(request.getStatus() != null ? request.getStatus() : (isPayOS ? null : (short) 1));
         invoice.setCheckinStatus((short) 0);
         invoice.setTicketMode(online ? "ONLINE" : "THEATER");
+        invoice.setShowtimeId(request.getShowtimeId());
+        invoice.setPaymentMethod(isPayOS ? "PAYOS" : "CASH");
+        invoice.setPaymentStatus(isPayOS ? "PENDING" : "PAID");
 
         // =========================
         // ACCOUNT LOOKUP
@@ -136,12 +143,52 @@ public class BookingServiceImpl implements BookingService {
 
         Invoice saved = invoiceRepository.save(invoice);
 
-        String roomName = cinemaRoomRepository.findById(schedule.getCinemaRoomId())
-                .map(CinemaRoom::getCinemaRoomName)
-                .orElse(null);
-        sendBookingConfirmationEmail(saved, request, roomName);
+        // For PayOS bookings, defer the confirmation email until payment is actually confirmed
+        // by the webhook (see sendPaymentConfirmedEmail) — don't promise a ticket before it's paid.
+        if (!isPayOS) {
+            String roomName = cinemaRoomRepository.findById(schedule.getCinemaRoomId())
+                    .map(CinemaRoom::getCinemaRoomName)
+                    .orElse(null);
+            sendBookingConfirmationEmail(saved, request, roomName);
+        }
 
         return toDto(saved);
+    }
+
+    @Override
+    public void sendPaymentConfirmedEmail(String invoiceId) {
+        Invoice invoice = invoiceRepository.findById(invoiceId).orElse(null);
+        if (invoice == null) return;
+
+        BookingRequestDTO stub = new BookingRequestDTO();
+        stub.setSeat(invoice.getSeat());
+        stub.setTicketMode(invoice.getTicketMode());
+        stub.setCustomerEmail(invoice.getAccount() != null ? invoice.getAccount().getEmail() : null);
+        if ("ONLINE".equals(invoice.getTicketMode())) {
+            try {
+                stub.setQuantity(Integer.parseInt(invoice.getSeat().replaceAll("[^0-9]", "")));
+            } catch (Exception ignored) {
+                stub.setQuantity(1);
+            }
+        }
+        // ticketAmount/serviceFee/comboAmount/voucherDiscount intentionally left null —
+        // buildTicketEmailHtml already falls back to invoice.getTotalMoney() when they're absent.
+
+        String roomName = null;
+        try {
+            if (invoice.getShowtimeId() != null) {
+                var schedule = scheduleRepository.findById(invoice.getShowtimeId()).orElse(null);
+                if (schedule != null) {
+                    roomName = cinemaRoomRepository.findById(schedule.getCinemaRoomId())
+                            .map(CinemaRoom::getCinemaRoomName)
+                            .orElse(null);
+                }
+            }
+        } catch (Exception ignored) {
+            // best-effort — email still sends without a room name
+        }
+
+        sendBookingConfirmationEmail(invoice, stub, roomName);
     }
 
     /**

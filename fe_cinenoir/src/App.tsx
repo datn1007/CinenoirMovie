@@ -88,6 +88,22 @@ export default function App() {
           }
         />
         <Route
+          path={ROUTES.BOOKING_PAYOS_RETURN}
+          element={
+            <ProtectedRoute requiredRole="any">
+              <BookingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.BOOKING_PAYOS_CANCEL}
+          element={
+            <ProtectedRoute requiredRole="any">
+              <BookingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path={ROUTES.PROFILE}
           element={
             <ProtectedRoute requiredRole="any">

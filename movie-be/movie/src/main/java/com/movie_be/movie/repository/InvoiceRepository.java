@@ -2,6 +2,7 @@ package com.movie_be.movie.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -13,6 +14,11 @@ public interface InvoiceRepository extends JpaRepository<Invoice, String> {
 
     @Query("SELECT i.invoiceId FROM Invoice i")
     List<String> findAllIds();
+
+    Optional<Invoice> findByPayosOrderCode(Long payosOrderCode);
+
+    List<Invoice> findByPaymentMethodAndPaymentStatusAndBookingDateBefore(
+            String paymentMethod, String paymentStatus, LocalDateTime cutoff);
 
     List<Invoice> findByInvoiceIdContainingIgnoreCase(String invoiceId);
 

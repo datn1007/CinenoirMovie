@@ -23,6 +23,8 @@ export const ROUTES = {
   STAFF_PROFILE: "/staff/profile",
 
   BOOKING: "/booking",
+  BOOKING_PAYOS_RETURN: "/booking/payos-return",
+  BOOKING_PAYOS_CANCEL: "/booking/payos-cancel",
   PROFILE: "/profile",
   WATCH: "/watch",
 } as const;

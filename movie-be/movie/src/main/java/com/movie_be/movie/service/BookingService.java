@@ -32,5 +32,11 @@ public interface BookingService {
      * Marks checkinStatus=1 and records checkinTime. Fails if already checked in.
      */
     BookingSearchResponse checkinTicket(@NonNull String invoiceId);
+
+    /**
+     * Sends the ticket confirmation email once a PayOS payment is confirmed (deferred from
+     * createBooking for the PAYOS path). No-op if the invoice can't be found.
+     */
+    void sendPaymentConfirmedEmail(String invoiceId);
 }
 

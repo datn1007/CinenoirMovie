@@ -17,6 +17,9 @@ interface BookingProps {
   onBookingComplete?: () => void;
   onWatchMovie?: (movie: Movie) => void;
   cinemaRooms?: unknown[];
+  /** Set when this page was reached via PayOS's returnUrl/cancelUrl redirect. */
+  payosMode?: "return" | "cancel" | null;
+  payosOrderCode?: string | null;
 }
 
 interface TicketResponse {
@@ -70,6 +73,27 @@ const mockPayment = {
   ticketCode: "CNR-MOCK-001",
 };
 
+const PAYOS_PENDING_KEY = "cinenoir_pending_payos_checkout";
+
+/** Display-only snapshot stashed before navigating to PayOS's hosted checkout page — nothing
+ *  sensitive, just enough to rehydrate the confirmation/ticket UI after the round trip (the
+ *  full-page redirect wipes all React state). */
+interface PendingPayOSCheckout {
+  orderCode: number;
+  invoiceId: string;
+  movieId: string;
+  ticketMode: "THEATER" | "ONLINE";
+  selectedSeats: string[];
+  onlineQuantity: number;
+  customerName: string;
+  customerEmail: string;
+  showDate?: string;
+  showTime?: string;
+  scheduleId?: number | null;
+  selectedConcessions: Record<string, number>;
+  appliedVoucher: { code: string; discountType: string; discountAmount: number; finalAmount: number } | null;
+}
+
 const authHeaders = () => {
   const token = localStorage.getItem("cinenoir_jwt_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -93,7 +117,7 @@ const voucherPercent = (discountType?: string) => {
 const HOLD_SECONDS = 300;
 const ONLINE_TICKET_PRICE = 100000;
 
-export default function BookingFlow({ movies, initialSelectedMovie, currentUser, onBookingComplete, onWatchMovie }: BookingProps) {
+export default function BookingFlow({ movies, initialSelectedMovie, currentUser, onBookingComplete, onWatchMovie, payosMode, payosOrderCode }: BookingProps) {
   const holderId = currentUser?.accountId ?? "";
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [ticketMode, setTicketMode] = useState<"THEATER" | "ONLINE">("THEATER");
@@ -125,6 +149,8 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
   const [showInvoice, setShowInvoice] = useState(false);
   const [showMovieGrid, setShowMovieGrid] = useState(!initialSelectedMovie);
   const [detailMovie, setDetailMovie] = useState<Movie | null>(null);
+  const [verifyingPayOS, setVerifyingPayOS] = useState(false);
+  const pendingRestoreRef = useRef<PendingPayOSCheckout | null>(null);
 
   useEffect(() => {
     if (initialSelectedMovie) {
@@ -158,6 +184,19 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
 
     return () => { cancelled = true; };
   }, [selectedMovie?.id]);
+
+  // Finishes restoring a PayOS-return snapshot once schedules for the restored movie have
+  // loaded (selecting the movie above resets date/time/scheduleId/seats synchronously, so this
+  // has to run as a separate step after the fetch resolves, not in the same tick).
+  useEffect(() => {
+    if (!pendingRestoreRef.current || !schedules.length) return;
+    const snap = pendingRestoreRef.current;
+    setSelectedDate(snap.showDate ?? "");
+    setSelectedTime(snap.showTime ?? "");
+    setSelectedScheduleId(snap.scheduleId ?? null);
+    setSelectedSeats(snap.selectedSeats);
+    pendingRestoreRef.current = null;
+  }, [schedules]);
 
   const dates = useMemo(() => uniq(schedules.map((s) => s.showDate).filter(Boolean) as string[]), [schedules]);
   const times = useMemo(() => uniq(schedules.filter((s) => s.showDate === selectedDate).map((s) => s.scheduleTime)), [schedules, selectedDate]);
@@ -499,13 +538,13 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
     onBookingComplete?.();
   };
 
-  const completeMockPayment = async () => {
+  const startPayOSCheckout = async () => {
     if (!selectedSchedule || !selectedMovie) return;
     setSubmitting(true);
     setErrorText("");
     try {
       const showtimeId = selectedSchedule.showtimeId ?? selectedSchedule.scheduleId;
-      const res = await fetch(`${API_BASE}/api/bookings`, {
+      const res = await fetch(`${API_BASE}/api/payments/payos/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() } as Record<string, string>,
         body: JSON.stringify({
@@ -520,33 +559,142 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
           totalMoney: payableTotal,
           useScore: 0,
           addScore: 0,
-          status: 2,
           customerEmail: customerEmail.trim(),
-          ticketAmount: totalSeatsPrice,
-          serviceFee: serviceCharge,
-          comboAmount: concessionTotal,
-          voucherDiscount,
+          returnUrl: `${window.location.origin}${ROUTES.BOOKING_PAYOS_RETURN}`,
+          cancelUrl: `${window.location.origin}${ROUTES.BOOKING_PAYOS_CANCEL}`,
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Lỗi thanh toán" }));
-        throw new Error((err as { error?: string }).error ?? "Đặt vé thất bại. Vui lòng thử lại.");
+        const err = await res.json().catch(() => ({ error: "Không thể khởi tạo thanh toán" }));
+        throw new Error((err as { error?: string }).error ?? "Không thể khởi tạo thanh toán. Vui lòng thử lại.");
       }
-      const data: { id?: string } = await res.json();
-      const realInvoiceId = data.id ?? mockPayment.invoiceId;
-      setTicket((current) =>
-        current ? { ...current, invoiceId: realInvoiceId, status: "PAID", totalAmount: payableTotal } : current
-      );
-      setPaymentStatus("PAID");
-      setHoldSecondsLeft(null);
-      setShowInvoice(false);
-      setStep(5);
+      const data: { invoiceId: string; orderCode: number; checkoutUrl: string } = await res.json();
+
+      const snapshot: PendingPayOSCheckout = {
+        orderCode: data.orderCode,
+        invoiceId: data.invoiceId,
+        movieId: selectedMovie.id,
+        ticketMode,
+        selectedSeats,
+        onlineQuantity,
+        customerName,
+        customerEmail,
+        showDate: selectedSchedule.showDate,
+        showTime: selectedSchedule.scheduleTime,
+        scheduleId: selectedSchedule.scheduleId,
+        selectedConcessions,
+        appliedVoucher,
+      };
+      sessionStorage.setItem(PAYOS_PENDING_KEY, JSON.stringify(snapshot));
+
+      window.location.href = data.checkoutUrl; // full navigation away to PayOS's hosted page
     } catch (err) {
       setErrorText(err instanceof Error ? err.message : "Lỗi thanh toán. Vui lòng thử lại.");
-    } finally {
       setSubmitting(false);
     }
   };
+
+  // Handles landing back on /booking/payos-return or /booking/payos-cancel after the PayOS
+  // round trip. Runs once on mount (payosMode is fixed for the lifetime of this page).
+  useEffect(() => {
+    if (!payosMode) return;
+
+    const raw = sessionStorage.getItem(PAYOS_PENDING_KEY);
+    const snapshot: PendingPayOSCheckout | null = raw ? JSON.parse(raw) : null;
+    const orderCode = payosOrderCode ?? (snapshot ? String(snapshot.orderCode) : null);
+
+    if (payosMode === "cancel") {
+      if (orderCode) {
+        fetch(`${API_BASE}/api/payments/payos/cancel/${orderCode}`, {
+          method: "POST",
+          headers: authHeaders() as Record<string, string>,
+        }).catch(() => {});
+      }
+      sessionStorage.removeItem(PAYOS_PENDING_KEY);
+      setErrorText("Thanh toán đã bị hủy. Vui lòng thử lại.");
+      setStep(1);
+      return;
+    }
+
+    // payosMode === "return"
+    if (!orderCode) {
+      setErrorText("Không tìm thấy thông tin thanh toán. Vui lòng kiểm tra vé của bạn trong Hồ sơ.");
+      setStep(1);
+      return;
+    }
+
+    if (snapshot) {
+      const movie = movies.find((m) => m.id === snapshot.movieId);
+      if (movie) {
+        setSelectedMovie(movie);
+        setShowMovieGrid(false);
+      }
+      setTicketMode(snapshot.ticketMode);
+      setOnlineQuantity(snapshot.onlineQuantity);
+      setCustomerName(snapshot.customerName);
+      setCustomerEmail(snapshot.customerEmail);
+      setSelectedConcessions(snapshot.selectedConcessions);
+      setAppliedVoucher(snapshot.appliedVoucher);
+      pendingRestoreRef.current = snapshot; // finished by the schedules-loaded effect once the movie's schedules arrive
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 15; // ~30s at 2s/poll
+
+    const poll = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const res = await fetch(`${API_BASE}/api/payments/payos/status/${orderCode}`, { headers: authHeaders() });
+        if (res.ok) {
+          const data: { invoiceId: string; paymentStatus: string; amount: number } = await res.json();
+          if (data.paymentStatus === "PAID") {
+            setTicket({
+              invoiceId: data.invoiceId,
+              movieName: snapshot ? (movies.find((m) => m.id === snapshot.movieId)?.title ?? "") : "",
+              showDate: snapshot?.showDate ?? "",
+              showTime: snapshot?.showTime ?? "",
+              seats: snapshot?.ticketMode === "ONLINE"
+                ? `Online x${snapshot.onlineQuantity}`
+                : (snapshot?.selectedSeats.join(", ") ?? ""),
+              bookedSeats: snapshot?.selectedSeats ?? [],
+              status: "PAID",
+              totalAmount: data.amount,
+            });
+            setPaymentStatus("PAID");
+            setHoldSecondsLeft(null);
+            setShowInvoice(false);
+            setVerifyingPayOS(false);
+            sessionStorage.removeItem(PAYOS_PENDING_KEY);
+            setStep(5);
+            return;
+          }
+          if (data.paymentStatus === "CANCELLED" || data.paymentStatus === "FAILED") {
+            setVerifyingPayOS(false);
+            sessionStorage.removeItem(PAYOS_PENDING_KEY);
+            setErrorText("Thanh toán không thành công hoặc đã bị hủy. Vui lòng thử lại.");
+            setStep(1);
+            return;
+          }
+        }
+      } catch {
+        // network hiccup — retry on next tick
+      }
+
+      if (attempts >= MAX_ATTEMPTS) {
+        setVerifyingPayOS(false);
+        setErrorText("Đang chờ xác nhận từ PayOS. Vui lòng kiểm tra lại trong trang Hồ sơ của bạn sau ít phút.");
+        return;
+      }
+      setTimeout(poll, 2000);
+    };
+
+    setVerifyingPayOS(true);
+    poll();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payosMode]);
 
   const ticketPrintHtml = () => `
     <html>
@@ -646,6 +794,12 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
 
   return (
     <div className="w-full min-h-[85vh] text-[#e5e2e1] px-4 py-6">
+      {verifyingPayOS && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[#0c0b0b]/90 backdrop-blur-sm">
+          <Loader2 className="h-10 w-10 animate-spin text-[#e50914]" />
+          <p className="text-sm font-bold text-white">Đang xác nhận thanh toán với PayOS...</p>
+        </div>
+      )}
       <div className="mx-auto mb-8 max-w-4xl">
         {holdSecondsLeft !== null && step >= 2 && step <= 4 && (
           <div className="mb-3 flex justify-end">
@@ -1098,12 +1252,12 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
 
           <div className="rounded-xl border border-[#5e3f3b]/35 bg-[#201f1f] p-6 space-y-4">
             <div className="flex items-center gap-4 rounded-lg border border-[#e50914]/35 bg-[#1a1a1a] p-4">
-              <div className="flex h-12 w-20 items-center justify-center rounded bg-gradient-to-r from-[#005BAA] to-[#0078D4]">
-                <span className="text-xs font-black tracking-wider text-white">VNPAY</span>
+              <div className="flex h-12 w-20 items-center justify-center rounded bg-gradient-to-r from-[#00B14F] to-[#00d15f]">
+                <span className="text-xs font-black tracking-wider text-white">PayOS</span>
               </div>
               <div>
-                <p className="text-sm font-black text-white">VNPAY</p>
-                <p className="text-[10px] text-[#e9bcb6]/60">Thanh toán qua cổng VNPAY giả lập</p>
+                <p className="text-sm font-black text-white">PayOS</p>
+                <p className="text-[10px] text-[#e9bcb6]/60">Bạn sẽ được chuyển đến trang thanh toán an toàn của PayOS.</p>
               </div>
               <div className="ml-auto flex items-center gap-1.5 rounded-full border border-[#e50914]/40 bg-[#e50914]/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-[#ff6b70]">
                 <Check className="h-3 w-3" /> Đã chọn
@@ -1125,14 +1279,14 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
               voucherCode={appliedVoucher?.code ?? null}
               voucherDiscount={voucherDiscount}
               totalAmount={payableTotal}
-              footer="Phương thức: VNPAY giả lập"
+              footer="Phương thức: PayOS"
             />
 
             {errorText && <ErrorBox message={errorText} />}
-            <button type="button" onClick={completeMockPayment} disabled={submitting}
+            <button type="button" onClick={startPayOSCheckout} disabled={submitting}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#e50914] py-3.5 text-sm font-black uppercase text-white shadow-[0_4px_16px_rgba(229,9,20,0.3)] transition-all hover:brightness-110 hover:-translate-y-0.5 active:scale-95 active:translate-y-0 disabled:opacity-60 disabled:hover:translate-y-0">
               {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <CreditCard className="h-5 w-5" />}
-              {submitting ? "Đang xử lý..." : `Xác nhận thanh toán – ${new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(payableTotal)}`}
+              {submitting ? "Đang chuyển đến PayOS..." : `Thanh toán qua PayOS – ${new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(payableTotal)}`}
             </button>
             <div className="pt-1">
               <button type="button" onClick={() => setStep(3)}
@@ -1227,7 +1381,7 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
               voucherCode={appliedVoucher?.code ?? null}
               voucherDiscount={voucherDiscount}
               totalAmount={payableTotal}
-              footer={`Phương thức thanh toán: VNPAY giả lập • Trạng thái: Đã thanh toán`}
+              footer={`Phương thức thanh toán: PayOS • Trạng thái: Đã thanh toán`}
             />
           )}
         </section>

@@ -87,5 +87,9 @@ public class BookingRequestDTO {
     private BigDecimal serviceFee;
     private BigDecimal comboAmount;
     private BigDecimal voucherDiscount;
+
+    /** "PAYOS" or null/"CASH". Set internally by PayOSPaymentServiceImpl when building a booking
+     *  for PayOS checkout — not something callers of the plain /api/bookings endpoint need to send. */
+    private String paymentMethod;
 }
 

@@ -67,6 +67,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Public: auth flows, docs, error dispatch, uploaded assets
                         .requestMatchers("/api/auth/**").permitAll()
+                        // PayOS server-to-server payment webhook — signature verified in the controller itself
+                        .requestMatchers(HttpMethod.POST, "/api/payments/payos/webhook").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()

@@ -69,6 +69,32 @@ public class SeatReservationServiceImpl implements SeatReservationService {
         scheduleSeatRepository.saveAll(toSave);
     }
 
+    @Override
+    public void releaseBookedSeats(Integer showtimeId, List<String> seatCodes) {
+        if (showtimeId == null || seatCodes == null || seatCodes.isEmpty()) return;
+
+        List<ScheduleSeat> toSave = new ArrayList<>();
+        for (String code : seatCodes) {
+            int[] parts;
+            try {
+                parts = parseSeatCode(code);
+            } catch (IllegalArgumentException e) {
+                continue; // skip malformed/non-seat codes
+            }
+            int seatRow = parts[0];
+            String seatColumn = String.valueOf((char) parts[1]);
+            List<ScheduleSeat> candidates = scheduleSeatRepository.findAllByShowtimeIdAndSeatRowAndSeatColumnIn(
+                    showtimeId, seatRow, java.util.Collections.singletonList(seatColumn));
+            for (ScheduleSeat ss : candidates) {
+                ss.setSeatStatus((short) 0);
+                ss.setHeldBy(null);
+                ss.setHeldUntil(null);
+                toSave.add(ss);
+            }
+        }
+        scheduleSeatRepository.saveAll(toSave);
+    }
+
     /**
      * FE seat code like A1..H12
      * returns [seatRow(1..8), seatColumnLetter]

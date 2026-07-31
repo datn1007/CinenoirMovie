@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { ROUTES } from "../constants/routes";
 import { Movie, CinemaRoom } from "../types";
@@ -12,8 +12,17 @@ import { API_BASE_URL } from "../lib/apiConfig";
 
 export default function BookingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { currentUser, isAdmin, logout } = useAuth();
+
+  const payosMode: "return" | "cancel" | null =
+    location.pathname === ROUTES.BOOKING_PAYOS_RETURN
+      ? "return"
+      : location.pathname === ROUTES.BOOKING_PAYOS_CANCEL
+        ? "cancel"
+        : null;
+  const payosOrderCode = searchParams.get("orderCode");
 
   const movieId = searchParams.get("movieId");
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -80,6 +89,8 @@ export default function BookingPage() {
             onBookingComplete={() => navigate(ROUTES.HOME)}
             onWatchMovie={(movie) => navigate(`${ROUTES.WATCH}?movieId=${movie.id}`)}
             cinemaRooms={cinemaRooms}
+            payosMode={payosMode}
+            payosOrderCode={payosOrderCode}
           />
         )}
       </div>

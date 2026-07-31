@@ -62,5 +62,24 @@ public class Invoice {
     @ManyToOne
     @JoinColumn(name = "account_id")
     private Account account;
+
+    /** Schedule/showtime id — needed to release seats if a PayOS checkout is cancelled/abandoned. */
+    @Column(name = "showtime_id")
+    private Integer showtimeId;
+
+    /** "PAYOS" or "CASH" (counter/staff sale, the default). */
+    @Column(name = "payment_method")
+    private String paymentMethod = "CASH";
+
+    /** "PENDING" | "PAID" | "CANCELLED" | "FAILED". Null for legacy rows created before this field existed. */
+    @Column(name = "payment_status")
+    private String paymentStatus;
+
+    /** The numeric orderCode sent to/from PayOS. */
+    @Column(name = "payos_order_code", unique = true)
+    private Long payosOrderCode;
+
+    @Column(name = "paid_at")
+    private LocalDateTime paidAt;
 }
 
