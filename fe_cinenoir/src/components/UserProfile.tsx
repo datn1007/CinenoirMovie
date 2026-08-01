@@ -627,8 +627,10 @@ export default function UserProfile({ currentUser, onBack, onUserUpdate, hideBoo
                               </span>
                             )}
 
-                            {(booking.status === 1 || booking.status === 2 ||
-                              (booking.status == null && booking.paymentStatus === "PENDING")) && (
+                            {/* Chỉ được tự hủy khi vé chưa thanh toán xong và chưa check-in — vé đã
+                                thanh toán (status 1/2/3) hoặc đã check-in thì không cho hủy nữa vì
+                                không có luồng hoàn tiền cho việc tự hủy này. */}
+                            {booking.status == null && booking.paymentStatus === "PENDING" && booking.checkinStatus !== 1 && (
                               cancelConfirmId === booking.invoiceId ? (
                                 <div className="flex flex-col items-end gap-1.5">
                                   <p className="text-[10px] text-white/50 text-right max-w-[140px]">
