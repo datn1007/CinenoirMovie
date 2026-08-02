@@ -128,27 +128,41 @@ export default function AuthScreen({ mode, onLoginSuccess, onSwitchMode, onBack 
   useEffect(() => {
     if (mode !== "login") return;
 
+    // Google's renderButton "width" only accepts a pixel number, not a percentage — "100%" is
+    // silently ignored and it falls back to a small default, which is why the button used to
+    // render noticeably narrower than the "Đăng nhập" button above it. Measure the actual
+    // container width instead, and re-measure on resize so it keeps matching.
+    const renderGoogleButton = () => {
+      if (!window.google?.accounts?.id || !googleButtonRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: "209274292743-rusvo7rnjb02sr2e400auc4gn2b6m43g.apps.googleusercontent.com",
+        callback: (response) => {
+          handleGoogleCredential(response.credential);
+        },
+      });
+      googleButtonRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "filled_black",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+        width: String(googleButtonRef.current.offsetWidth || 300),
+      });
+    };
+
     // Poll for Google library to be available
     const interval = setInterval(() => {
       if (window.google?.accounts?.id && googleButtonRef.current) {
         clearInterval(interval);
-        window.google.accounts.id.initialize({
-          client_id: "209274292743-rusvo7rnjb02sr2e400auc4gn2b6m43g.apps.googleusercontent.com",
-          callback: (response) => {
-            handleGoogleCredential(response.credential);
-          },
-        });
-        window.google.accounts.id.renderButton(googleButtonRef.current, {
-          theme: "filled_black",
-          size: "large",
-          text: "signin_with",
-          shape: "pill",
-          width: "100%",
-        });
+        renderGoogleButton();
       }
     }, 200);
 
-    return () => clearInterval(interval);
+    window.addEventListener("resize", renderGoogleButton);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("resize", renderGoogleButton);
+    };
   }, [mode]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
