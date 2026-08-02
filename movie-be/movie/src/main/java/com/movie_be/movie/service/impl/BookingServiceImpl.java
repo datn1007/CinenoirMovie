@@ -211,22 +211,30 @@ public class BookingServiceImpl implements BookingService {
 
         String subject = "Vé xem phim CineNoir - " + invoice.getInvoiceId();
         boolean online = "ONLINE".equals(invoice.getTicketMode());
-        String html = buildTicketEmailHtml(invoice, request, roomName, online);
+
+        // Brevo's transactional email API has no support for cid-referenced inline images, so the
+        // QR code is embedded as a base64 data URI directly in the HTML instead of a MIME attachment.
+        String qrDataUri = null;
+        if (!online) {
+            try {
+                byte[] qrPng = com.movie_be.movie.util.QrCodeGenerator.generatePng(invoice.getInvoiceId(), 220);
+                qrDataUri = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(qrPng);
+            } catch (Exception e) {
+                log.error("Failed to generate QR code for invoice {}", invoice.getInvoiceId(), e);
+            }
+        }
+
+        String html = buildTicketEmailHtml(invoice, request, roomName, online, qrDataUri);
 
         try {
-            if (online) {
-                emailService.sendHtmlEmail(toEmail, subject, html);
-            } else {
-                byte[] qrPng = com.movie_be.movie.util.QrCodeGenerator.generatePng(invoice.getInvoiceId(), 220);
-                emailService.sendHtmlEmailWithInlineImage(toEmail, subject, html, "ticketQrCode", qrPng, "image/png");
-            }
+            emailService.sendHtmlEmail(toEmail, subject, html);
             log.info("Booking confirmation email sent to {} for invoice {}", toEmail, invoice.getInvoiceId());
         } catch (Exception e) {
             log.error("Failed to send booking confirmation email to {} for invoice {}", toEmail, invoice.getInvoiceId(), e);
         }
     }
 
-    private String buildTicketEmailHtml(Invoice invoice, BookingRequestDTO request, String roomName, boolean online) {
+    private String buildTicketEmailHtml(Invoice invoice, BookingRequestDTO request, String roomName, boolean online, String qrDataUri) {
         int seatCount = online ? request.getQuantity() : request.getSeatList().size();
         String showDate = invoice.getScheduleShow() != null ? invoice.getScheduleShow().format(DISPLAY_DATE_FORMAT) : "";
 
@@ -278,10 +286,12 @@ public class BookingServiceImpl implements BookingService {
                     : "<div style=\"margin-top:16px;padding:10px;background:#fff8e1;border:1px solid #f0d98c;border-radius:4px;text-align:center;font-weight:600;color:#8a6d00;\">"
                       + "Trạng thái vé: Chờ xác thực — vui lòng xuất trình mã QR bên dưới cho nhân viên soát vé"
                       + "</div>"
-                      + "<div style=\"text-align:center;margin-top:16px;\">"
-                      + "<img src=\"cid:ticketQrCode\" alt=\"QR Code\" width=\"180\" height=\"180\" style=\"display:inline-block;\">"
-                      + "<div style=\"margin-top:6px;font-size:11px;color:#777;\">Mã vé: " + invoice.getInvoiceId() + "</div>"
-                      + "</div>")
+                      + (qrDataUri != null
+                          ? "<div style=\"text-align:center;margin-top:16px;\">"
+                            + "<img src=\"" + qrDataUri + "\" alt=\"QR Code\" width=\"180\" height=\"180\" style=\"display:inline-block;\">"
+                            + "<div style=\"margin-top:6px;font-size:11px;color:#777;\">Mã vé: " + invoice.getInvoiceId() + "</div>"
+                            + "</div>"
+                          : ""))
                 + "</div>"
                 + "<div style=\"background:#7a0c12;color:#f2d9d9;padding:20px 24px;font-size:12px;line-height:1.6;\">"
                 + "<div style=\"color:#ffffff;font-weight:bold;font-size:15px;margin-bottom:6px;\">CineNoir Cinemas</div>"

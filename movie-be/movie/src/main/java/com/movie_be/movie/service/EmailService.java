@@ -1,50 +1,58 @@
 package com.movie_be.movie.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
-import jakarta.mail.internet.MimeMessage;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-
+/**
+ * Sends transactional email via Brevo's HTTPS API instead of raw SMTP — Render's free tier
+ * blocks outbound connections on SMTP ports (587/465/25), so JavaMailSender/Gmail SMTP just
+ * times out there. Brevo's API runs over HTTPS (443), which isn't blocked.
+ */
 @Service
 public class EmailService {
 
-    @Autowired
-    private JavaMailSender mailSender;
+    private static final String BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email";
 
-    public void sendEmail(String to, String subject, String body) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(body);
+    private final RestTemplate restTemplate;
 
+    @Value("${brevo.api-key:}")
+    private String apiKey;
 
+    @Value("${brevo.sender-email:}")
+    private String senderEmail;
 
-        mailSender.send(message);
+    @Value("${brevo.sender-name:CineNoir}")
+    private String senderName;
+
+    public EmailService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
     }
 
-    public void sendHtmlEmail(String to, String subject, String htmlBody) throws Exception {
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
-        helper.setTo(to);
-        helper.setSubject(subject);
-        helper.setText(htmlBody, true);
-        mailSender.send(message);
-    }
+    public void sendHtmlEmail(String to, String subject, String htmlBody) {
+        if (apiKey == null || apiKey.isBlank() || senderEmail == null || senderEmail.isBlank()) {
+            throw new IllegalStateException(
+                    "Brevo email credentials are not configured (BREVO_API_KEY/BREVO_SENDER_EMAIL).");
+        }
 
-    /** htmlBody should reference the inline image as {@code <img src="cid:<cid>">}. */
-    public void sendHtmlEmailWithInlineImage(String to, String subject, String htmlBody,
-                                              String cid, byte[] imageBytes, String imageContentType) throws Exception {
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-        helper.setTo(to);
-        helper.setSubject(subject);
-        helper.setText(htmlBody, true);
-        helper.addInline(cid, new ByteArrayResource(imageBytes), imageContentType);
-        mailSender.send(message);
+        Map<String, Object> body = new HashMap<>();
+        body.put("sender", Map.of("email", senderEmail, "name", senderName));
+        body.put("to", List.of(Map.of("email", to)));
+        body.put("subject", subject);
+        body.put("htmlContent", htmlBody);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("api-key", apiKey);
+        headers.set("Accept", "application/json");
+
+        restTemplate.postForEntity(BREVO_ENDPOINT, new HttpEntity<>(body, headers), String.class);
     }
 }
