@@ -151,6 +151,7 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
   const [showMovieGrid, setShowMovieGrid] = useState(!initialSelectedMovie);
   const [detailMovie, setDetailMovie] = useState<Movie | null>(null);
   const [verifyingPayOS, setVerifyingPayOS] = useState(false);
+  const [restorePending, setRestorePending] = useState(false);
   const pendingRestoreRef = useRef<PendingPayOSCheckout | null>(null);
 
   useEffect(() => {
@@ -189,14 +190,19 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
   // Finishes restoring a PayOS-return snapshot once schedules for the restored movie have
   // loaded (selecting the movie above resets date/time/scheduleId/seats synchronously, so this
   // has to run as a separate step after the fetch resolves, not in the same tick).
+  // THEATER mode: don't restore selectedSeats here yet — pinning scheduleId below changes
+  // showtimeId, which the seat-map effect further down treats as "switched showtime" and wipes
+  // selectedSeats back to []. Stage 3 (keyed on the seat map itself) re-applies it afterwards.
   useEffect(() => {
     if (!pendingRestoreRef.current || !schedules.length) return;
     const snap = pendingRestoreRef.current;
     setSelectedDate(snap.showDate ?? "");
     setSelectedTime(snap.showTime ?? "");
     setSelectedScheduleId(snap.scheduleId ?? null);
-    setSelectedSeats(snap.selectedSeats);
-    pendingRestoreRef.current = null;
+    if (snap.ticketMode === "ONLINE") {
+      pendingRestoreRef.current = null;
+      setRestorePending(false);
+    }
   }, [schedules]);
 
   const dates = useMemo(() => uniq(schedules.map((s) => s.showDate).filter(Boolean) as string[]), [schedules]);
@@ -275,6 +281,17 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
       .finally(() => !cancelled && setLoadingSeats(false));
     return () => { cancelled = true; };
   }, [showtimeId, selectedMovie?.id, ticketMode]);
+
+  // Stage 3 of a PayOS-return restore (THEATER only): the seat-map effect above always clears
+  // selectedSeats when showtimeId changes — including when we just pinned it above to restore a
+  // past booking — so re-apply the paid-for seats once that seat map has actually loaded.
+  useEffect(() => {
+    if (!pendingRestoreRef.current || pendingRestoreRef.current.ticketMode !== "THEATER") return;
+    if (loadingSeats || !seats.length) return;
+    setSelectedSeats(pendingRestoreRef.current.selectedSeats);
+    pendingRestoreRef.current = null;
+    setRestorePending(false);
+  }, [seats, loadingSeats]);
 
   // While the customer is choosing seats, poll so seats another shopper just
   // grabbed show up as locked here in near-real-time (mirrors what "held for 5
@@ -639,7 +656,8 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
       setCustomerEmail(snapshot.customerEmail);
       setSelectedConcessions(snapshot.selectedConcessions);
       setAppliedVoucher(snapshot.appliedVoucher);
-      pendingRestoreRef.current = snapshot; // finished by the schedules-loaded effect once the movie's schedules arrive
+      pendingRestoreRef.current = snapshot; // finished by the schedules/seat-map-loaded effects above
+      setRestorePending(true);
     }
 
     let cancelled = false;
@@ -674,7 +692,9 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
             setShowInvoice(false);
             setVerifyingPayOS(false);
             sessionStorage.removeItem(PAYOS_PENDING_KEY);
-            setStep(5);
+            // Don't jump to step 5 here — if a seat/schedule restore is still in flight, wait
+            // for it (see the paymentStatus/restorePending effect) so the ticket doesn't render
+            // with empty seats/price for a frame.
             return;
           }
           if (data.paymentStatus === "CANCELLED" || data.paymentStatus === "FAILED") {
@@ -708,6 +728,24 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payosMode]);
+
+  // Only move to the ticket screen once payment is confirmed AND any seat/schedule restore
+  // triggered by that confirmation has actually finished applying — otherwise the ticket briefly
+  // renders with empty seats/price (restorePending toggling false re-runs this once it's ready).
+  useEffect(() => {
+    if (paymentStatus !== "PAID") return;
+    if (!restorePending) {
+      setStep(5);
+      return;
+    }
+    // Safety net: don't let a stuck/failed restore (e.g. seat-map fetch error) block the ticket
+    // screen forever — force it through after a few seconds either way.
+    const t = setTimeout(() => {
+      pendingRestoreRef.current = null;
+      setRestorePending(false);
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [paymentStatus, restorePending]);
 
   const ticketPrintHtml = () => `
     <html>
