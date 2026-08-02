@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import QRCode from "qrcode";
 import { Movie, Schedule, ScheduleSeatAvailability } from "../types";
 import MovieDetailModal from "./MovieDetailModal";
@@ -118,6 +118,7 @@ const HOLD_SECONDS = 300;
 const ONLINE_TICKET_PRICE = 1000;
 
 export default function BookingFlow({ movies, initialSelectedMovie, currentUser, onBookingComplete, onWatchMovie, payosMode, payosOrderCode }: BookingProps) {
+  const navigate = useNavigate();
   const holderId = currentUser?.accountId ?? "";
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [ticketMode, setTicketMode] = useState<"THEATER" | "ONLINE">("THEATER");
@@ -640,7 +641,10 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
 
     let cancelled = false;
     let attempts = 0;
-    const MAX_ATTEMPTS = 15; // ~30s at 2s/poll
+    // PayOS confirmation (time spent on their checkout page + webhook delivery) has been
+    // observed taking 80-95s in practice — poll generously so most payments resolve while
+    // the user is still watching instead of timing out on them mid-confirmation.
+    const MAX_ATTEMPTS = 60; // ~3 minutes at 3s/poll
 
     const poll = async () => {
       if (cancelled) return;
@@ -683,11 +687,17 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
       }
 
       if (attempts >= MAX_ATTEMPTS) {
+        // Still not resolved after ~3 minutes of polling — the webhook will keep updating the
+        // booking server-side regardless of whether this tab stays open, so send the user
+        // somewhere they can actually see that once it lands instead of leaving them stuck
+        // mid-flow with a message they have no way to act on.
         setVerifyingPayOS(false);
-        setErrorText("Đang chờ xác nhận từ PayOS. Vui lòng kiểm tra lại trong trang Hồ sơ của bạn sau ít phút.");
+        sessionStorage.removeItem(PAYOS_PENDING_KEY);
+        alert("Thanh toán đang được xác nhận, có thể mất thêm vài phút. Vé sẽ tự xuất hiện trong lịch sử đặt vé của bạn khi xác nhận xong.");
+        navigate(ROUTES.PROFILE);
         return;
       }
-      setTimeout(poll, 2000);
+      setTimeout(poll, 3000);
     };
 
     setVerifyingPayOS(true);
