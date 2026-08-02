@@ -67,6 +67,11 @@ public class Invoice {
     @Column(name = "showtime_id")
     private Integer showtimeId;
 
+    /** FK-by-value to Movie.movieId — lets ONLINE tickets be resolved back to a watchable movie
+     *  from booking history. Not enforced as a real @ManyToOne to keep this change minimal. */
+    @Column(name = "movie_id", length = 10)
+    private String movieId;
+
     /** "PAYOS" or "CASH" (counter/staff sale, the default). */
     @Column(name = "payment_method")
     private String paymentMethod = "CASH";

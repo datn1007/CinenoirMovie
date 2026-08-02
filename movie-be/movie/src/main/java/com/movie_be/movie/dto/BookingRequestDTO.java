@@ -38,6 +38,9 @@ public class BookingRequestDTO {
     @NotBlank(message = "movieName is required")
     private String movieName;
 
+    /** Movie.movieId — lets ONLINE tickets be resolved back to a watchable movie later. */
+    private String movieId;
+
     /** seats as comma-separated string (e.g. "H1,H2") from FE — required for THEATER tickets, ignored for ONLINE */
     private String seat;
 

@@ -42,4 +42,10 @@ public class BookingSearchResponse {
 
     // "PENDING" | "PAID" | "CANCELLED" | "FAILED" | null (bookings created before this field existed)
     private String paymentStatus;
+
+    // Movie.movieId — lets the FE build a "Xem Phim" link for ONLINE tickets.
+    private String movieId;
+
+    // dạng yyyy-MM-dd HH:mm, null nếu chưa thanh toán — dùng để tính hạn 24h xem online.
+    private String paidAt;
 }

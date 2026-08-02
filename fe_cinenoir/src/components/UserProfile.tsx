@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Staff } from "../types";
+import { ROUTES } from "../constants/routes";
 import {
   ChevronLeft, Save, User, Mail, Phone, MapPin, Calendar, Users, IdCard,
-  CheckCircle, AlertCircle, Ticket, XCircle, Loader2, RefreshCw, Clock3, QrCode,
+  CheckCircle, AlertCircle, Ticket, XCircle, Loader2, RefreshCw, Clock3, QrCode, PlayCircle,
 } from "lucide-react";
+
+// Online tickets are a one-time purchase valid for 24h from payment confirmation (paidAt).
+const ONLINE_ACCESS_HOURS = 24;
+const isOnlineAccessValid = (paidAt: string | null | undefined) =>
+  !!paidAt && Date.now() - new Date(paidAt).getTime() < ONLINE_ACCESS_HOURS * 60 * 60 * 1000;
 
 interface AccountDTO {
   accountId: string;
@@ -36,6 +43,8 @@ interface BookingRecord {
   ticketMode?: string | null;
   paymentMethod?: string | null;
   paymentStatus?: string | null;
+  movieId?: string | null;
+  paidAt?: string | null;
 }
 
 interface UserProfileProps {
@@ -64,6 +73,7 @@ const formatMoney = (value: number) =>
 const formatDate = (value?: string | null) => sharedFormatDate(value);
 
 export default function UserProfile({ currentUser, onBack, onUserUpdate, hideBookingHistory }: UserProfileProps) {
+  const navigate = useNavigate();
   const [account, setAccount] = useState<AccountDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -605,10 +615,21 @@ export default function UserProfile({ currentUser, onBack, onUserUpdate, hideBoo
                             })()}
 
                             {booking.ticketMode === "ONLINE" ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-900/30 text-emerald-400 border-emerald-700/40">
-                                <Ticket className="w-3 h-3" />
-                                Vé xem online
-                              </span>
+                              booking.paymentStatus === "PAID" && isOnlineAccessValid(booking.paidAt) && booking.movieId ? (
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`${ROUTES.WATCH}?movieId=${booking.movieId}`)}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-emerald-900/30 text-emerald-400 border-emerald-700/40 hover:bg-emerald-900/50 transition-colors"
+                                >
+                                  <PlayCircle className="w-3 h-3" />
+                                  Xem Phim
+                                </button>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-gray-800/50 text-gray-400 border-gray-600/30">
+                                  <Ticket className="w-3 h-3" />
+                                  {booking.paymentStatus === "PAID" ? "Đã hết hạn xem" : "Vé xem online"}
+                                </span>
+                              )
                             ) : (
                               <span
                                 className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${

@@ -450,6 +450,15 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
       return setErrorText("Suất chiếu này đã qua giờ chiếu. Vui lòng chọn suất khác.");
     }
     setErrorText("");
+    if (ticketMode === "ONLINE") {
+      // Online is a single one-time purchase — no seat/quantity step needed, straight to review.
+      setOnlineQuantity(1);
+      setAppliedVoucher(null);
+      setVoucherInput("");
+      setVoucherError("");
+      setStep(3);
+      return;
+    }
     setStep(2);
   };
 
@@ -569,6 +578,7 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
           scheduleShow: String(showtimeId),
           scheduleShowTime: selectedSchedule.scheduleTime,
           movieName: selectedMovie.title,
+          movieId: selectedMovie.id,
           seat: ticketMode === "ONLINE" ? "" : selectedSeats.join(","),
           ticketMode,
           quantity: ticketMode === "ONLINE" ? onlineQuantity : undefined,
@@ -953,6 +963,12 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
                 <Loading text="Đang tải lịch chiếu..." />
               ) : schedules.length === 0 ? (
                 <Empty text="Phim này hiện chưa có suất chiếu khả dụng." />
+              ) : ticketMode === "ONLINE" ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[#5e3f3b]/45 bg-[#131313] p-6 text-center">
+                  <MonitorPlay className="h-8 w-8 text-[#e50914]" />
+                  <p className="text-sm font-bold text-white">Xem online — không cần chọn rạp hay giờ chiếu</p>
+                  <p className="text-xs text-[#e9bcb6]/60">Thanh toán một lần, xem ngay trong vòng 24 giờ.</p>
+                </div>
               ) : (
                 <div className="flex flex-1 flex-col gap-4">
                   <Picker title="Ngày chiếu" items={dates} selected={selectedDate} onSelect={setSelectedDate} format={formatDate} isDisabled={isDateDisabled} disabledHint="Ngày này không còn suất chiếu nào sắp tới" />
@@ -1034,49 +1050,6 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
               </div>
             ))}
           </div>
-        </section>
-      )}
-
-      {step === 2 && ticketMode === "ONLINE" && (
-        <section className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-12">
-          <div className="lg:col-span-8 space-y-5">
-            <button type="button" onClick={() => setStep(1)}
-              className="flex items-center gap-1 text-xs font-bold text-[#e9bcb6]/85 hover:text-white">
-              <ArrowLeft className="h-4 w-4" />Quay lại
-            </button>
-            <div className="flex flex-col items-center gap-6 rounded-2xl border border-[#5e3f3b]/30 bg-[#1c1b1b] p-10 text-center">
-              <Video className="h-10 w-10 text-[#ffb4aa]/70" />
-              <div>
-                <p className="text-lg font-black text-white">Vé xem online</p>
-                <p className="mt-1 text-xs text-[#e9bcb6]/70">Không cần chọn ghế — bạn có thể xem phim trên web ngay sau khi thanh toán.</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Số lượng vé</Label>
-                <div className="flex items-center gap-4">
-                  <button type="button" onClick={() => setOnlineQuantity((q) => Math.max(1, q - 1))}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#5e3f3b]/45 text-white hover:border-[#ffb4aa]/60">
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <span className="w-10 text-center text-2xl font-black text-white">{onlineQuantity}</span>
-                  <button type="button" onClick={() => setOnlineQuantity((q) => Math.min(8, q + 1))}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#5e3f3b]/45 text-white hover:border-[#ffb4aa]/60">
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="text-[10px] text-[#e9bcb6]/60">{money(ONLINE_TICKET_PRICE)} / vé</p>
-              </div>
-            </div>
-          </div>
-          <Summary
-            selectedMovie={selectedMovie}
-            schedule={selectedSchedule}
-            selectedSeats={[]}
-            seatLabel={`${onlineQuantity} vé online`}
-            total={totalSeatsPrice}
-            errorText={errorText}
-            onConfirm={goConfirmStep}
-            confirmDisabled={onlineQuantity < 1}
-          />
         </section>
       )}
 
@@ -1210,11 +1183,13 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
               </FormField>
             </div>
 
-            <ConcessionPicker
-              items={concessionItems}
-              selected={selectedConcessions}
-              onChange={updateConcession}
-            />
+            {ticketMode === "THEATER" && (
+              <ConcessionPicker
+                items={concessionItems}
+                selected={selectedConcessions}
+                onChange={updateConcession}
+              />
+            )}
 
             <div className="md:col-span-2 rounded-xl border border-[#5e3f3b]/35 bg-[#201f1f] p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-[#5e3f3b]/25 pb-3">

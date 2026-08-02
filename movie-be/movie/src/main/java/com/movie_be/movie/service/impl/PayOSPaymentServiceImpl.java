@@ -53,6 +53,7 @@ public class PayOSPaymentServiceImpl implements PayOSPaymentService {
         bookingReq.setScheduleShow(req.getScheduleShow());
         bookingReq.setScheduleShowTime(req.getScheduleShowTime());
         bookingReq.setMovieName(req.getMovieName());
+        bookingReq.setMovieId(req.getMovieId());
         bookingReq.setSeat(req.getSeat());
         bookingReq.setTicketMode(req.getTicketMode());
         bookingReq.setQuantity(req.getQuantity());

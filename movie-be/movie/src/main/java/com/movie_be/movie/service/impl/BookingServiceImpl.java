@@ -117,6 +117,7 @@ public class BookingServiceImpl implements BookingService {
         invoice.setInvoiceId(invoiceId);
         invoice.setBookingDate(LocalDateTime.now());
         invoice.setMovieName(request.getMovieName());
+        invoice.setMovieId(request.getMovieId());
 
         invoice.setScheduleShow(schedule.getShowDate() != null ? schedule.getShowDate() : LocalDate.now());
         invoice.setScheduleShowTime(schedule.getScheduleTime());
@@ -441,6 +442,13 @@ public class BookingServiceImpl implements BookingService {
                 ? invoice.getCheckinTime().format(CHECKIN_TIME_FORMAT)
                 : null;
 
+        // ISO-8601 with an explicit "Z" (the JVM runs in UTC — see application.properties/deploy
+        // notes — so LocalDateTime.now() already holds a UTC instant) so the FE can safely do
+        // real date-math (24h online-viewing expiry) instead of just displaying it.
+        String paidAtFormatted = invoice.getPaidAt() != null
+                ? invoice.getPaidAt().toString() + "Z"
+                : null;
+
         BookingSearchResponse.BookingSearchResponseBuilder builder =
                 BookingSearchResponse.builder()
                         .invoiceId(invoice.getInvoiceId())
@@ -456,7 +464,9 @@ public class BookingServiceImpl implements BookingService {
                         .checkinTime(checkinTimeFormatted)
                         .ticketMode(invoice.getTicketMode())
                         .paymentMethod(invoice.getPaymentMethod())
-                        .paymentStatus(invoice.getPaymentStatus());
+                        .paymentStatus(invoice.getPaymentStatus())
+                        .movieId(invoice.getMovieId())
+                        .paidAt(paidAtFormatted);
 
         if (invoice.getAccount() != null) {
             builder.accountId(invoice.getAccount().getAccountId())

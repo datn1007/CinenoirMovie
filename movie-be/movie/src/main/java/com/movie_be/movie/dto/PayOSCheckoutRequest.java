@@ -23,6 +23,9 @@ public class PayOSCheckoutRequest {
     @NotBlank(message = "movieName is required")
     private String movieName;
 
+    /** Movie.movieId — lets ONLINE tickets be resolved back to a watchable movie later. */
+    private String movieId;
+
     /** comma-separated seat codes — required for THEATER, ignored for ONLINE */
     private String seat;
 

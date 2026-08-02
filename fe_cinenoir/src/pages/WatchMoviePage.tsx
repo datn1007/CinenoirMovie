@@ -12,6 +12,12 @@ import { API_BASE_URL } from "../lib/apiConfig";
 // upload lên server (/uploads/movies/...) — cần ghép với API_BASE_URL để phát đúng nguồn.
 const resolveMovieSrc = (url?: string) => (!url ? "" : url.startsWith("http") ? url : `${API_BASE_URL}${url}`);
 
+const ONLINE_ACCESS_HOURS = 24;
+const authHeaders = () => {
+  const token = localStorage.getItem("cinenoir_jwt_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export default function WatchMoviePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -21,6 +27,7 @@ export default function WatchMoviePage() {
   const [movie, setMovie] = useState<Movie | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (!movieId) {
@@ -28,15 +35,37 @@ export default function WatchMoviePage() {
       setLoading(false);
       return;
     }
+    if (!currentUser?.accountId) {
+      setErrorText("Bạn cần đăng nhập để xem phim.");
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
-    fetch(`${API_BASE_URL}/api/movies/${movieId}`)
-      .then((res) => {
+
+    Promise.all([
+      fetch(`${API_BASE_URL}/api/movies/${movieId}`).then((res) => {
         if (!res.ok) throw new Error();
         return res.json() as Promise<Movie>;
-      })
-      .then((data) => {
-        if (!cancelled) setMovie(data);
+      }),
+      // Vé xem online là mua 1 lần, có hiệu lực 24 giờ kể từ lúc thanh toán (paidAt) — kiểm tra
+      // lại đúng vé đã mua cho phim này còn hạn không, không dựa vào việc đã đăng nhập là đủ.
+      fetch(`${API_BASE_URL}/api/bookings/search?accountId=${encodeURIComponent(currentUser.accountId)}`, {
+        headers: authHeaders(),
+      }).then((res) => (res.ok ? res.json() : [])),
+    ])
+      .then(([movieData, bookings]: [Movie, Array<{ movieId?: string; ticketMode?: string; paymentStatus?: string; paidAt?: string }>]) => {
+        if (cancelled) return;
+        setMovie(movieData);
+        const hasValidAccess = bookings.some(
+          (b) =>
+            b.ticketMode === "ONLINE" &&
+            b.paymentStatus === "PAID" &&
+            b.movieId === movieId &&
+            b.paidAt != null &&
+            Date.now() - new Date(b.paidAt).getTime() < ONLINE_ACCESS_HOURS * 60 * 60 * 1000
+        );
+        setAccessDenied(!hasValidAccess);
       })
       .catch(() => {
         if (!cancelled) setErrorText("Không thể tải thông tin phim.");
@@ -47,7 +76,7 @@ export default function WatchMoviePage() {
     return () => {
       cancelled = true;
     };
-  }, [movieId]);
+  }, [movieId, currentUser?.accountId]);
 
   const handleLogout = () => {
     logout();
@@ -93,6 +122,20 @@ export default function WatchMoviePage() {
           <div className="flex flex-col items-center justify-center gap-3 py-32 text-center text-[#af8782]">
             <VideoOff className="w-10 h-10" />
             <p className="text-sm font-semibold">Phim "{movie.title}" chưa có bản xem online.</p>
+          </div>
+        ) : accessDenied ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-32 text-center text-[#af8782]">
+            <VideoOff className="w-10 h-10" />
+            <p className="text-sm font-semibold">
+              Bạn chưa mua vé xem online cho phim "{movie.title}", hoặc vé đã hết hạn (chỉ có hiệu lực 24 giờ kể từ lúc thanh toán).
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate(`${ROUTES.BOOKING}?movieId=${movieId}`)}
+              className="mt-2 rounded-lg bg-[#e50914] px-4 py-2 text-xs font-black uppercase text-white hover:brightness-110"
+            >
+              Mua Vé Xem Online
+            </button>
           </div>
         ) : (
           <>
