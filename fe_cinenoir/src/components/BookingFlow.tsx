@@ -561,8 +561,11 @@ export default function BookingFlow({ movies, initialSelectedMovie, currentUser,
           useScore: 0,
           addScore: 0,
           customerEmail: customerEmail.trim(),
-          returnUrl: `${window.location.origin}${ROUTES.BOOKING_PAYOS_RETURN}`,
-          cancelUrl: `${window.location.origin}${ROUTES.BOOKING_PAYOS_CANCEL}`,
+          // This app uses HashRouter (see main.tsx) — routes only resolve after a "#", so PayOS's
+          // redirect must target /#/booking/... or React Router sees no matching route at all
+          // and falls through to the catch-all redirect (straight to Home).
+          returnUrl: `${window.location.origin}/#${ROUTES.BOOKING_PAYOS_RETURN}`,
+          cancelUrl: `${window.location.origin}/#${ROUTES.BOOKING_PAYOS_CANCEL}`,
         }),
       });
       if (!res.ok) {
