@@ -72,6 +72,8 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                        // Public: QR code image referenced by URL from ticket confirmation emails
+                        .requestMatchers(HttpMethod.GET, "/api/tickets/*/qr.png").permitAll()
 
                         // Public: read-only catalog browsing (movies, showtimes, rooms, seat maps)
                         .requestMatchers(HttpMethod.GET,

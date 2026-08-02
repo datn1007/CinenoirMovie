@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +48,9 @@ public class BookingServiceImpl implements BookingService {
     private final ScheduleRepository scheduleRepository;
     private final CinemaRoomRepository cinemaRoomRepository;
     private final EmailService emailService;
+
+    @Value("${app.backend-base-url:http://localhost:8080}")
+    private String backendBaseUrl;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter DISPLAY_DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -212,19 +216,12 @@ public class BookingServiceImpl implements BookingService {
         String subject = "Vé xem phim CineNoir - " + invoice.getInvoiceId();
         boolean online = "ONLINE".equals(invoice.getTicketMode());
 
-        // Brevo's transactional email API has no support for cid-referenced inline images, so the
-        // QR code is embedded as a base64 data URI directly in the HTML instead of a MIME attachment.
-        String qrDataUri = null;
-        if (!online) {
-            try {
-                byte[] qrPng = com.movie_be.movie.util.QrCodeGenerator.generatePng(invoice.getInvoiceId(), 220);
-                qrDataUri = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(qrPng);
-            } catch (Exception e) {
-                log.error("Failed to generate QR code for invoice {}", invoice.getInvoiceId(), e);
-            }
-        }
+        // Gmail (and most clients) strip base64-embedded <img> data from HTML email as an
+        // anti-abuse measure, so the QR code is referenced as a normal https:// image URL served
+        // by TicketQrController instead of being embedded inline.
+        String qrImageUrl = online ? null : backendBaseUrl + "/api/tickets/" + invoice.getInvoiceId() + "/qr.png";
 
-        String html = buildTicketEmailHtml(invoice, request, roomName, online, qrDataUri);
+        String html = buildTicketEmailHtml(invoice, request, roomName, online, qrImageUrl);
 
         try {
             emailService.sendHtmlEmail(toEmail, subject, html);
@@ -234,7 +231,7 @@ public class BookingServiceImpl implements BookingService {
         }
     }
 
-    private String buildTicketEmailHtml(Invoice invoice, BookingRequestDTO request, String roomName, boolean online, String qrDataUri) {
+    private String buildTicketEmailHtml(Invoice invoice, BookingRequestDTO request, String roomName, boolean online, String qrImageUrl) {
         int seatCount = online ? request.getQuantity() : request.getSeatList().size();
         String showDate = invoice.getScheduleShow() != null ? invoice.getScheduleShow().format(DISPLAY_DATE_FORMAT) : "";
 
@@ -286,9 +283,9 @@ public class BookingServiceImpl implements BookingService {
                     : "<div style=\"margin-top:16px;padding:10px;background:#fff8e1;border:1px solid #f0d98c;border-radius:4px;text-align:center;font-weight:600;color:#8a6d00;\">"
                       + "Trạng thái vé: Chờ xác thực — vui lòng xuất trình mã QR bên dưới cho nhân viên soát vé"
                       + "</div>"
-                      + (qrDataUri != null
+                      + (qrImageUrl != null
                           ? "<div style=\"text-align:center;margin-top:16px;\">"
-                            + "<img src=\"" + qrDataUri + "\" alt=\"QR Code\" width=\"180\" height=\"180\" style=\"display:inline-block;\">"
+                            + "<img src=\"" + qrImageUrl + "\" alt=\"QR Code\" width=\"180\" height=\"180\" style=\"display:inline-block;\">"
                             + "<div style=\"margin-top:6px;font-size:11px;color:#777;\">Mã vé: " + invoice.getInvoiceId() + "</div>"
                             + "</div>"
                           : ""))
