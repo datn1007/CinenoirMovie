@@ -115,7 +115,7 @@ const voucherPercent = (discountType?: string) => {
 
 
 const HOLD_SECONDS = 300;
-const ONLINE_TICKET_PRICE = 1000;
+const ONLINE_TICKET_PRICE = 3000;
 
 export default function BookingFlow({ movies, initialSelectedMovie, currentUser, onBookingComplete, onWatchMovie, payosMode, payosOrderCode }: BookingProps) {
   const navigate = useNavigate();
