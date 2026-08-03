@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { AppView } from "../types";
-import { Search, Bell, ChevronDown, X, ShieldAlert, User } from "lucide-react";
+import { Search, ChevronDown, X, ShieldAlert, User } from "lucide-react";
 
 type HomeTab = "home" | "nowShowing" | "comingSoon" | "promotions";
 
@@ -152,10 +152,6 @@ export default function Header({
 
         {isLoggedIn ? (
           <>
-            <button className="hidden sm:block text-white/80 hover:text-white transition-colors p-1">
-              <Bell className="w-5 h-5" />
-            </button>
-
             {isAdmin && (
               <button
                 onClick={() => onNavigate("Dashboard")}
