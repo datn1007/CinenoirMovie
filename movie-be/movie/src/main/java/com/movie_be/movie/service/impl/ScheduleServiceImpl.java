@@ -28,7 +28,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ScheduleServiceImpl implements ScheduleService {
 
-    private static final String[] COLUMNS = {"A", "B", "C", "D", "E", "F", "G", "H"};
+    // 10 columns so the max room size (80 seats, enforced in CinemaRoomDTO) always fits within
+    // exactly 8 rows — SeatReservationServiceImpl.parseSeatCode only accepts seat-code rows A-H,
+    // so any more than 8 generated rows would produce seats customers could never book.
+    private static final String[] COLUMNS = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"};
     private static final int CLEANING_TIME_MINUTES = 15;
 
     private final ScheduleRepository scheduleRepository;

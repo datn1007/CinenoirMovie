@@ -35,7 +35,7 @@ export default function RoomManagement({ rooms, onReload }: RoomManagementProps)
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [editRoom, setEditRoom] = useState<CinemaRoom | null>(null);
   const [formName, setFormName] = useState("");
-  const [formSeats, setFormSeats] = useState<number>(100);
+  const [formSeats, setFormSeats] = useState<number>(80);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -63,7 +63,7 @@ export default function RoomManagement({ rooms, onReload }: RoomManagementProps)
   // ── Open create modal ──
   const openCreate = () => {
     setFormName("");
-    setFormSeats(100);
+    setFormSeats(80);
     setError("");
     setEditRoom(null);
     setModalMode("create");
@@ -78,12 +78,14 @@ export default function RoomManagement({ rooms, onReload }: RoomManagementProps)
     setModalMode("edit");
   };
 
+  const MAX_SEATS = 80;
+
   // ── Save (create or update) ──
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) { setError("Tên phòng không được để trống."); return; }
     if (!Number.isInteger(formSeats) || formSeats <= 0) { setError("Số ghế phải là số nguyên lớn hơn 0."); return; }
-    if (formSeats > 500) { setError("Số ghế không được vượt quá 500."); return; }
+    if (formSeats > MAX_SEATS) { setError(`Số ghế không được vượt quá ${MAX_SEATS} (giới hạn 8 hàng x 10 ghế/hàng).`); return; }
 
     setSaving(true);
     setError("");
@@ -103,11 +105,22 @@ export default function RoomManagement({ rooms, onReload }: RoomManagementProps)
         body: JSON.stringify({ cinemaRoomName: formName.trim(), seatQuantity: formSeats }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        // Backend validation errors (GlobalExceptionHandler) come back as JSON with a
+        // per-field "fieldErrors" map — surface the real reason instead of a generic message.
+        const body = await res.json().catch(() => null) as
+          | { message?: string; fieldErrors?: Record<string, string> }
+          | null;
+        const fieldMessage = body?.fieldErrors
+          ? Object.values(body.fieldErrors)[0]
+          : undefined;
+        throw new Error(fieldMessage ?? body?.message ?? `Lỗi máy chủ (HTTP ${res.status}).`);
+      }
       setModalMode(null);
+      showToast(isEdit ? `Đã cập nhật phòng "${formName.trim()}".` : `Đã tạo phòng "${formName.trim()}".`, true);
       onReload();
-    } catch {
-      setError("Lỗi kết nối server. Vui lòng thử lại.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Lỗi kết nối server. Vui lòng thử lại.");
     } finally {
       setSaving(false);
     }
@@ -278,11 +291,15 @@ export default function RoomManagement({ rooms, onReload }: RoomManagementProps)
             </div>
 
             <div>
-              <FieldLabel required>Số Ghế</FieldLabel>
+              <FieldLabel required>
+                Số Ghế{" "}
+                <span className="normal-case font-medium text-[#af8782]/60">(tối đa {MAX_SEATS})</span>
+              </FieldLabel>
               <input
                 type="number"
                 required
                 min={1}
+                max={MAX_SEATS}
                 value={formSeats}
                 onChange={(e) => setFormSeats(Number(e.target.value))}
                 className={inputClass}

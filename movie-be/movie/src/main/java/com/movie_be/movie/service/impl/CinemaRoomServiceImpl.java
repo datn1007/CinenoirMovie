@@ -21,11 +21,12 @@ public class CinemaRoomServiceImpl implements CinemaRoomService {
     private final CinemaRoomRepository cinemaRoomRepository;
     private final ScheduleSeatRepository scheduleSeatRepository;
 
-    // Số cột hợp lý cho 1 hàng ghế rạp phim (kiểu CGV/Galaxy) — không cố định 8 cột nữa,
-    // mà chọn động trong khoảng này sao cho vừa khít nhất với tổng số ghế của phòng.
-    private static final int MIN_COLUMNS = 8;
-    private static final int MAX_COLUMNS = 14;
-    private static final int IDEAL_COLUMNS = 12;
+    // Cố định 10 cột/hàng — khớp với ScheduleServiceImpl.COLUMNS, nơi thực sự sinh ghế cho suất
+    // chiếu. Phòng tối đa 80 ghế (CinemaRoomDTO) nên luôn vừa đúng 8 hàng x 10 cột, nằm trong
+    // giới hạn hàng A-H mà SeatReservationServiceImpl.parseSeatCode chấp nhận khi đặt vé.
+    private static final int MIN_COLUMNS = 10;
+    private static final int MAX_COLUMNS = 10;
+    private static final int IDEAL_COLUMNS = 10;
 
     @Override
     public List<CinemaRoomDTO> getAllActive() {
